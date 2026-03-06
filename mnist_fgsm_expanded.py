@@ -15,14 +15,18 @@ import random
 import datetime
 import itertools
 
-import numpy as np
+import matplotlib
+matplotlib.use("Agg")  # Must be BEFORE importing pyplot — no display needed (Codespaces/servers)
 import matplotlib.pyplot as plt
+
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
 from tensorflow.keras.datasets import mnist
 from tensorflow.keras.utils import to_categorical
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # Suppress CUDA/GPU warnings
 
 # ---------------------------------------------------------------------------
 # Config
@@ -34,6 +38,7 @@ EPOCHS = 5
 VAL_SPLIT = 0.1
 EPSILONS = [0.0, 0.05, 0.1, 0.15, 0.2, 0.3]
 
+PLOTS_DIR = "plots"
 MODEL_PATH = "cnn_mnist_fgsm.h5"
 ADV_MODEL_PATH = "cnn_mnist_fgsm_adv_trained.h5"
 RESULTS_PATH = "experiment_results.json"
@@ -157,7 +162,7 @@ def adversarial_finetune(
 
     This is a simple but effective adversarial training strategy.
     """
-    print(f"Generating adversarial training set (ε={epsilon}) ...")
+    print(f"Generating adversarial training set (epsilon={epsilon}) ...")
     adv_x = generate_adversarial_dataset(model, x_train, y_train_cat, epsilon=epsilon, batch_size=batch_size)
 
     combined_x = np.vstack([x_train, adv_x])
@@ -275,21 +280,29 @@ def sweep_epsilons(
 
     results = {}
     for eps in epsilons:
-        print(f"\n--- ε = {eps} ---")
+        print(f"\n--- epsilon = {eps} ---")
         if eps == 0.0:
-            acc, _, _ = evaluate(model, x_test, y_test_cat, y_test_int, label=f"ε={eps}")
+            acc, _, _ = evaluate(model, x_test, y_test_cat, y_test_int, label=f"eps={eps}")
         else:
             adv = generate_adversarial_dataset(model, x_test, y_test_cat, epsilon=eps, batch_size=512)
-            acc, _, _ = evaluate(model, adv, y_test_cat, y_test_int, label=f"ε={eps}")
+            acc, _, _ = evaluate(model, adv, y_test_cat, y_test_int, label=f"eps={eps}")
         results[eps] = acc
     return results
 
 
 # ---------------------------------------------------------------------------
-# Visualisation
+# Visualisation helpers
 # ---------------------------------------------------------------------------
 
-def plot_training_history(history, title: str = "") -> None:
+def _savefig(filename: str) -> None:
+    """Save current figure to PLOTS_DIR and close it."""
+    path = os.path.join(PLOTS_DIR, filename)
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Plot saved -> {path}")
+
+
+def plot_training_history(history, title: str = "", filename: str = "training_history.png") -> None:
     hist = history.history if hasattr(history, "history") else history
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
@@ -310,11 +323,14 @@ def plot_training_history(history, title: str = "") -> None:
     axes[1].legend()
 
     plt.tight_layout()
-    plt.show()
+    _savefig(filename)
 
 
 def plot_confusion_matrix(
-    cm, classes, normalize: bool = False, title: str = "Confusion matrix"
+    cm, classes,
+    normalize: bool = False,
+    title: str = "Confusion matrix",
+    filename: str = "confusion_matrix.png",
 ) -> None:
     if normalize:
         cm = cm.astype("float") / (cm.sum(axis=1, keepdims=True) + 1e-12)
@@ -339,10 +355,14 @@ def plot_confusion_matrix(
     plt.ylabel("True label")
     plt.xlabel("Predicted label")
     plt.tight_layout()
-    plt.show()
+    _savefig(filename)
 
 
-def plot_accuracy_vs_epsilon(results_before: dict, results_after: dict = None) -> None:
+def plot_accuracy_vs_epsilon(
+    results_before: dict,
+    results_after: dict = None,
+    filename: str = "accuracy_vs_epsilon.png",
+) -> None:
     eps = sorted(results_before.keys())
     plt.figure(figsize=(8, 5))
     plt.plot(eps, [results_before[e] for e in eps], marker="o", label="Before adv training")
@@ -353,21 +373,20 @@ def plot_accuracy_vs_epsilon(results_before: dict, results_after: dict = None) -
     plt.ylabel("Accuracy")
     plt.legend()
     plt.grid(True)
-    plt.show()
+    _savefig(filename)
 
 
 def visualize_adversarial_examples(
-    originals, adversarials, labels_true, preds_adv=None, n: int = 6
+    originals, adversarials, labels_true,
+    preds_adv=None, n: int = 6,
+    filename: str = "adversarial_examples.png",
 ) -> None:
-    """
-    Show n rows of: [original | adversarial | perturbation × 10].
-    """
+    """Show n rows of: [original | adversarial | perturbation x 10]."""
     n = min(n, len(originals))
     idxs = np.random.choice(len(originals), size=n, replace=False)
 
     fig, axes = plt.subplots(n, 3, figsize=(9, 3 * n))
-    col_titles = ["Original", "Adversarial", "Perturbation ×10"]
-    for col, title in enumerate(col_titles):
+    for col, title in enumerate(["Original", "Adversarial", "Perturbation x10"]):
         axes[0, col].set_title(title)
 
     for row, idx in enumerate(idxs):
@@ -378,9 +397,9 @@ def visualize_adversarial_examples(
         axes[row, 0].imshow(orig, cmap="gray")
         axes[row, 0].set_ylabel(f"label={labels_true[idx]}", fontsize=8)
 
-        adv_title = f"pred={preds_adv[idx]}" if preds_adv is not None else ""
         axes[row, 1].imshow(adv, cmap="gray")
-        axes[row, 1].set_ylabel(adv_title, fontsize=8)
+        if preds_adv is not None:
+            axes[row, 1].set_ylabel(f"pred={preds_adv[idx]}", fontsize=8)
 
         axes[row, 2].imshow(pert * 10 + 0.5, cmap="gray", vmin=0, vmax=1)
 
@@ -388,7 +407,7 @@ def visualize_adversarial_examples(
             ax.axis("off")
 
     plt.tight_layout()
-    plt.show()
+    _savefig(filename)
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +416,7 @@ def visualize_adversarial_examples(
 
 def main():
     set_seeds()
+    os.makedirs(PLOTS_DIR, exist_ok=True)
 
     # ------ Data ------
     x_train, y_train_cat, x_test, y_test_cat, y_train_int, y_test_int = load_mnist()
@@ -409,65 +429,68 @@ def main():
 
     print("\n=== Clean training ===")
     history_clean = train(model, x_tr, y_tr, x_val, y_val, epochs=EPOCHS)
-    plot_training_history(history_clean, title="Clean training")
+    plot_training_history(history_clean, title="Clean training", filename="history_clean.png")
 
     # ------ Baseline evaluation ------
     print("\n=== Baseline evaluation (clean test set) ===")
     evaluate(model, x_test, y_test_cat, y_test_int, label="Clean")
 
     # ------ Epsilon sweep (before adversarial training) ------
-    print("\n=== Epsilon sweep — before adversarial training ===")
+    print("\n=== Epsilon sweep - before adversarial training ===")
     eps_before = sweep_epsilons(model, x_test, y_test_cat, y_test_int)
-    plot_accuracy_vs_epsilon(eps_before)
+    plot_accuracy_vs_epsilon(eps_before, filename="epsilon_sweep_before.png")
 
-    # ------ Visualise adversarial examples (ε=0.1) ------
+    # ------ Visualise adversarial examples (epsilon=0.1) ------
     adv_vis = generate_adversarial_dataset(model, x_test[:500], y_test_cat[:500], epsilon=0.1)
-    _, preds_adv_vis, _ = evaluate(model, adv_vis, y_test_cat[:500], y_test_int[:500], label="Adv ε=0.1")
-    visualize_adversarial_examples(x_test[:500], adv_vis, y_test_int[:500], preds_adv=preds_adv_vis)
+    _, preds_adv_vis, _ = evaluate(model, adv_vis, y_test_cat[:500], y_test_int[:500], label="Adv eps=0.1")
+    visualize_adversarial_examples(x_test[:500], adv_vis, y_test_int[:500],
+                                   preds_adv=preds_adv_vis, filename="adv_examples_before.png")
 
     # ------ Confusion matrices (before) ------
-    print("\n=== Confusion matrices — before adversarial training ===")
+    print("\n=== Confusion matrices - before adversarial training ===")
     _, preds_clean, true = evaluate(model, x_test, y_test_cat, y_test_int, label="Clean")
     adv_full = generate_adversarial_dataset(model, x_test, y_test_cat, epsilon=0.1, batch_size=512)
-    _, preds_adv_full, _ = evaluate(model, adv_full, y_test_cat, y_test_int, label="Adv ε=0.1")
+    _, preds_adv_full, _ = evaluate(model, adv_full, y_test_cat, y_test_int, label="Adv eps=0.1")
 
     plot_confusion_matrix(confusion_matrix(true, preds_clean), list(range(10)),
-                          title="Clean — before adv training")
+                          title="Clean - before adv training", filename="cm_clean_before.png")
     plot_confusion_matrix(confusion_matrix(true, preds_adv_full), list(range(10)),
-                          title="Adversarial ε=0.1 — before adv training")
+                          title="Adversarial eps=0.1 - before adv training", filename="cm_adv_before.png")
 
     # ------ Save clean model ------
     model.save(MODEL_PATH)
-    print(f"Clean model saved → {MODEL_PATH}")
+    print(f"Clean model saved -> {MODEL_PATH}")
 
     # ------ Adversarial fine-tuning ------
     print("\n=== Adversarial fine-tuning ===")
     model_adv = tf.keras.models.load_model(MODEL_PATH)
     history_adv = adversarial_finetune(model_adv, x_tr, y_tr, epsilon=0.1, batch_size=512, epochs=2)
-    plot_training_history(history_adv, title="Adversarial fine-tuning")
+    plot_training_history(history_adv, title="Adversarial fine-tuning", filename="history_adv.png")
 
     # ------ Evaluation after adversarial training ------
-    print("\n=== Evaluation — after adversarial training ===")
+    print("\n=== Evaluation - after adversarial training ===")
     evaluate(model_adv, x_test, y_test_cat, y_test_int, label="Clean (after)")
     adv_after = generate_adversarial_dataset(model_adv, x_test, y_test_cat, epsilon=0.1, batch_size=512)
-    _, preds_adv_after, true_after = evaluate(model_adv, adv_after, y_test_cat, y_test_int, label="Adv ε=0.1 (after)")
+    _, preds_adv_after, true_after = evaluate(model_adv, adv_after, y_test_cat, y_test_int, label="Adv eps=0.1 (after)")
 
     plot_confusion_matrix(confusion_matrix(true_after, preds_adv_after), list(range(10)),
-                          title="Adversarial ε=0.1 — after adv training")
+                          title="Adversarial eps=0.1 - after adv training", filename="cm_adv_after.png")
 
     # ------ Epsilon sweep (after adversarial training) ------
-    print("\n=== Epsilon sweep — after adversarial training ===")
+    print("\n=== Epsilon sweep - after adversarial training ===")
     eps_after = sweep_epsilons(model_adv, x_test, y_test_cat, y_test_int)
-    plot_accuracy_vs_epsilon(eps_before, eps_after)
+    plot_accuracy_vs_epsilon(eps_before, eps_after, filename="epsilon_sweep_comparison.png")
 
     # ------ Visualise adversarial examples from fine-tuned model ------
     adv_vis_after = generate_adversarial_dataset(model_adv, x_test[:300], y_test_cat[:300], epsilon=0.1)
-    _, preds_vis_after, _ = evaluate(model_adv, adv_vis_after, y_test_cat[:300], y_test_int[:300], label="Adv ε=0.1 (after)")
-    visualize_adversarial_examples(x_test[:300], adv_vis_after, y_test_int[:300], preds_adv=preds_vis_after)
+    _, preds_vis_after, _ = evaluate(model_adv, adv_vis_after, y_test_cat[:300],
+                                     y_test_int[:300], label="Adv eps=0.1 (after)")
+    visualize_adversarial_examples(x_test[:300], adv_vis_after, y_test_int[:300],
+                                   preds_adv=preds_vis_after, filename="adv_examples_after.png")
 
     # ------ Save adversarially trained model ------
     model_adv.save(ADV_MODEL_PATH)
-    print(f"Adversarially trained model saved → {ADV_MODEL_PATH}")
+    print(f"Adversarially trained model saved -> {ADV_MODEL_PATH}")
 
     # ------ Persist experiment results ------
     results = {
@@ -480,7 +503,8 @@ def main():
     }
     with open(RESULTS_PATH, "w") as f:
         json.dump(results, f, indent=2)
-    print(f"Results saved → {RESULTS_PATH}")
+    print(f"Results saved -> {RESULTS_PATH}")
+    print(f"\nAll plots saved to: {PLOTS_DIR}/")
     print("\n=== Done ===")
 
 
