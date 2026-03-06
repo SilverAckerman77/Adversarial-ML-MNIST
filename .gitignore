@@ -1,6 +1,5 @@
 *.h5
 *.keras
-plots/
 experiment_results.json
 training_history.json
 __pycache__/
