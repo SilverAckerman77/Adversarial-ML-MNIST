@@ -76,10 +76,14 @@ See `requirements.txt` for pinned versions.
 
 ## Results Summary
 
-| Condition | Clean Accuracy | Adv. Accuracy (ε=0.1) |
+| Epsilon | Before Adv. Training | After Adv. Training |
 |---|---|---|
-| Before adversarial training | ~99% | ~XX% |
-| After adversarial training | ~XX% | ~XX% |
+| 0.00 (clean) | 99.02% | 99.20% |
+| 0.05 | 96.26% | 97.56% |
+| 0.10 | 87.74% | 93.95% |
+| 0.15 | 68.34% | 87.42% |
+| 0.20 | 39.35% | 75.23% |
+| 0.30 | 7.33% | 40.28% |
 
 *(Fill in your actual values from `experiment_results.json` after running)*
 
