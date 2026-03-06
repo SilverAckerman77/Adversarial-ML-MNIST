@@ -89,6 +89,24 @@ See `requirements.txt` for pinned versions.
 
 ---
 
+## Plots
+
+### Training History
+![Clean Training History](plots/history_clean.png)
+
+### Accuracy vs Epsilon
+![Accuracy vs Epsilon](plots/epsilon_sweep_comparison.png)
+
+### Adversarial Examples
+![Adversarial Examples](plots/adv_examples_before.png)
+
+### Confusion Matrices
+| Clean | Adversarial (ε=0.1) |
+|---|---|
+| ![](plots/cm_clean_before.png) | ![](plots/cm_adv_before.png) |
+
+---
+
 ## How FGSM Works
 
 FGSM generates adversarial examples by taking a single gradient step in the direction that **maximizes the loss**:
