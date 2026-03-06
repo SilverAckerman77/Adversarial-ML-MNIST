@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.egg-link
+*.manifest
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Keras / TensorFlow saved models
+*.h5
+*.keras
+saved_model/
+*.pb
+*.ckpt
+*.ckpt.*
+checkpoint
+
+# Experiment outputs (optional — remove if you want to track these)
+experiment_results.json
+training_history.json
+
+# Logs
+logs/
+*.log
+tensorboard_logs/
+
+# Data (MNIST downloads via Keras, no need to track)
+~/.keras/datasets/
+*.npz
+*.npy
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
